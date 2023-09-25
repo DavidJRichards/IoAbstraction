@@ -4,6 +4,13 @@ Dave Cherry / TheCodersCorner.com made this library available for you to use. It
 
 This library provides several useful extensions that make programming Arduino / mbed for non-trivial apps simpler. There are many different practical and familiar examples packaged with it in the `examples` folder. Below I cover each of the main functions briefly with a link to more detailed documentation. The API is almost identical between Arduino and mbed making it easier to port between the two. 
 
+## djrm: Sept 2023. modified to use simple encoder state machine
+
+The existing library did not work very well for me using the usual cheap encoders available on AE & Ebay although I have had satisfactory results using some other libraries. I have modified this library using code found here: https://github.com/buxtronix/arduino/tree/master/libraries/Rotary and now it is workin ok. Tested on RP2040 and ESP32 with Acceleration and MCP23017 with interrupts.
+
+WIP, still need to be able to switch between different encoder types, hardcoded to use HALF_STEP kind. see macro HALF_STEP in SwitchInput.cpp to change
+
+
 ## Documentation and questions
 
 Along with ths quick start guide and the examples also see:

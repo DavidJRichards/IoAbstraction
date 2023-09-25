@@ -426,13 +426,97 @@ int HardwareRotaryEncoder::amountFromChange(unsigned long change) {
 
 }
 
+
+#define R_START 0x0
+#define DIR_NONE 0x0
+#define DIR_CW 0x10
+#define DIR_CCW 0x20
+
+#define HALF_STEP
+
+#ifdef HALF_STEP
+// Use the half-step state table (emits a code at 00 and 11)
+#define R_CCW_BEGIN 0x1
+#define R_CW_BEGIN 0x2
+#define R_START_M 0x3
+#define R_CW_BEGIN_M 0x4
+#define R_CCW_BEGIN_M 0x5
+const unsigned char ttable[6][4] = {
+  // R_START (00)
+  {R_START_M,            R_CW_BEGIN,     R_CCW_BEGIN,  R_START},
+  // R_CCW_BEGIN
+  {R_START_M | DIR_CCW, R_START,        R_CCW_BEGIN,  R_START},
+  // R_CW_BEGIN
+  {R_START_M | DIR_CW,  R_CW_BEGIN,     R_START,      R_START},
+  // R_START_M (11)
+  {R_START_M,            R_CCW_BEGIN_M,  R_CW_BEGIN_M, R_START},
+  // R_CW_BEGIN_M
+  {R_START_M,            R_START_M,      R_CW_BEGIN_M, R_START | DIR_CW},
+  // R_CCW_BEGIN_M
+  {R_START_M,            R_CCW_BEGIN_M,  R_START_M,    R_START | DIR_CCW},
+};
+#else
+// Use the full-step state table (emits a code at 00 only)
+#define R_CW_FINAL 0x1
+#define R_CW_BEGIN 0x2
+#define R_CW_NEXT 0x3
+#define R_CCW_BEGIN 0x4
+#define R_CCW_FINAL 0x5
+#define R_CCW_NEXT 0x6
+
+const unsigned char ttable[7][4] = {
+  // R_START
+  {R_START,    R_CW_BEGIN,  R_CCW_BEGIN, R_START},
+  // R_CW_FINAL
+  {R_CW_NEXT,  R_START,     R_CW_FINAL,  R_START | DIR_CW},
+  // R_CW_BEGIN
+  {R_CW_NEXT,  R_CW_BEGIN,  R_START,     R_START},
+  // R_CW_NEXT
+  {R_CW_NEXT,  R_CW_BEGIN,  R_CW_FINAL,  R_START},
+  // R_CCW_BEGIN
+  {R_CCW_NEXT, R_START,     R_CCW_BEGIN, R_START},
+  // R_CCW_FINAL
+  {R_CCW_NEXT, R_CCW_FINAL, R_START,     R_START | DIR_CCW},
+  // R_CCW_NEXT
+  {R_CCW_NEXT, R_CCW_FINAL, R_CCW_BEGIN, R_START},
+};
+#endif
+
+
+
 void HardwareRotaryEncoder::encoderChanged() {
 	bool lastSyncStatus = switches.getIoAbstraction()->sync();
     bitWrite(flags, LAST_SYNC_STATUS, lastSyncStatus);
 
-	uint8_t a = switches.getIoAbstraction()->digitalRead(pinA);
-	uint8_t b = switches.getIoAbstraction()->digitalRead(pinB);
-
+	uint8_t a = 1 & switches.getIoAbstraction()->digitalRead(pinA);
+	uint8_t b = 1 & switches.getIoAbstraction()->digitalRead(pinB);
+#if 1
+    static uint8_t state = R_START;
+    uint8_t incr;
+    uint8_t pinstate = (b << 1) | a;
+    state = ttable[state & 0xf][pinstate];
+    incr = state & 0x30;
+    {
+        unsigned long timeNow = micros();
+        unsigned long deltaMillis = timeNow - lastChange;
+        int amt = amountFromChange(deltaMillis);
+        
+        if(incr==DIR_CW)
+        {
+            increment(amt);
+            lastChange = timeNow;
+            bitWrite(flags, LAST_ENCODER_DIRECTION_UP, true);
+        }
+        else if(incr == DIR_CCW)
+        {
+            increment(-amt);
+            lastChange = timeNow;
+            bitWrite(flags, LAST_ENCODER_DIRECTION_UP, false);
+        } 
+    }   
+    return;
+    
+#else    
 	if(encoderType == QUARTER_CYCLE){
 		if((a != aLast) || (b != cleanFromB)) {
 			aLast = a;
@@ -455,6 +539,7 @@ void HardwareRotaryEncoder::encoderChanged() {
 			}
 		}	
 	}
+#endif	
 }
 
 void HardwareRotaryEncoder::handleChangeRaw(bool increase) {
