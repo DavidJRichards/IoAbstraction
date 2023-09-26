@@ -425,38 +425,37 @@ int HardwareRotaryEncoder::amountFromChange(unsigned long change) {
     }
 
 }
-
-
+// uncomment this or supply as compiler build flag
+//#define USE_ENCODER_SSM
+#if USE_ENCODER_SSM
+// use alternative encoder simple state machine
 #define R_START 0x0
 #define DIR_NONE 0x0
 #define DIR_CW 0x10
 #define DIR_CCW 0x20
 
-#define HALF_STEP
-
-#ifdef HALF_STEP
-// Use the half-step state table (emits a code at 00 and 11)
-#define R_CCW_BEGIN 0x1
-#define R_CW_BEGIN 0x2
-#define R_START_M 0x3
-#define R_CW_BEGIN_M 0x4
-#define R_CCW_BEGIN_M 0x5
-const unsigned char ttable[6][4] = {
+// The half-step state table (emits a code at 00 and 11)
+#define Q_CCW_BEGIN 0x1
+#define Q_CW_BEGIN 0x2
+#define Q_START_M 0x3
+#define Q_CW_BEGIN_M 0x4
+#define Q_CCW_BEGIN_M 0x5
+const unsigned char half_ttable[6][4] = {
   // R_START (00)
-  {R_START_M,            R_CW_BEGIN,     R_CCW_BEGIN,  R_START},
+  {Q_START_M,            Q_CW_BEGIN,     Q_CCW_BEGIN,  R_START},
   // R_CCW_BEGIN
-  {R_START_M | DIR_CCW, R_START,        R_CCW_BEGIN,  R_START},
+  {Q_START_M | DIR_CCW, R_START,        Q_CCW_BEGIN,  R_START},
   // R_CW_BEGIN
-  {R_START_M | DIR_CW,  R_CW_BEGIN,     R_START,      R_START},
+  {Q_START_M | DIR_CW,  Q_CW_BEGIN,     R_START,      R_START},
   // R_START_M (11)
-  {R_START_M,            R_CCW_BEGIN_M,  R_CW_BEGIN_M, R_START},
+  {Q_START_M,            Q_CCW_BEGIN_M,  Q_CW_BEGIN_M, R_START},
   // R_CW_BEGIN_M
-  {R_START_M,            R_START_M,      R_CW_BEGIN_M, R_START | DIR_CW},
+  {Q_START_M,            Q_START_M,      Q_CW_BEGIN_M, R_START | DIR_CW},
   // R_CCW_BEGIN_M
-  {R_START_M,            R_CCW_BEGIN_M,  R_START_M,    R_START | DIR_CCW},
+  {Q_START_M,            Q_CCW_BEGIN_M,  Q_START_M,    R_START | DIR_CCW},
 };
-#else
-// Use the full-step state table (emits a code at 00 only)
+
+// The full-step state table (emits a code at 00 only)
 #define R_CW_FINAL 0x1
 #define R_CW_BEGIN 0x2
 #define R_CW_NEXT 0x3
@@ -464,7 +463,7 @@ const unsigned char ttable[6][4] = {
 #define R_CCW_FINAL 0x5
 #define R_CCW_NEXT 0x6
 
-const unsigned char ttable[7][4] = {
+const unsigned char full_ttable[7][4] = {
   // R_START
   {R_START,    R_CW_BEGIN,  R_CCW_BEGIN, R_START},
   // R_CW_FINAL
@@ -480,21 +479,23 @@ const unsigned char ttable[7][4] = {
   // R_CCW_NEXT
   {R_CCW_NEXT, R_CCW_FINAL, R_CCW_BEGIN, R_START},
 };
-#endif
-
-
 
 void HardwareRotaryEncoder::encoderChanged() {
 	bool lastSyncStatus = switches.getIoAbstraction()->sync();
     bitWrite(flags, LAST_SYNC_STATUS, lastSyncStatus);
 
-	uint8_t a = 1 & switches.getIoAbstraction()->digitalRead(pinA);
-	uint8_t b = 1 & switches.getIoAbstraction()->digitalRead(pinB);
-#if 1
+	uint8_t a = (switches.getIoAbstraction()->digitalRead(pinA)) ? 1 : 0;
+	uint8_t b = (switches.getIoAbstraction()->digitalRead(pinB)) ? 1 : 0;
     static uint8_t state = R_START;
     uint8_t incr;
     uint8_t pinstate = (b << 1) | a;
-    state = ttable[state & 0xf][pinstate];
+	if(encoderType == QUARTER_CYCLE){
+    	state = half_ttable[state & 0xf][pinstate];
+	}
+	else
+	{
+   	state = full_ttable[state & 0xf][pinstate];
+	}
     incr = state & 0x30;
     {
         unsigned long timeNow = micros();
@@ -515,8 +516,17 @@ void HardwareRotaryEncoder::encoderChanged() {
         } 
     }   
     return;
-    
-#else    
+}
+
+#else // USE_ENCODER_SSM    
+#warning ENCODER SSM DISABLED
+void HardwareRotaryEncoder::encoderChanged() {
+	bool lastSyncStatus = switches.getIoAbstraction()->sync();
+    bitWrite(flags, LAST_SYNC_STATUS, lastSyncStatus);
+
+	uint8_t a = switches.getIoAbstraction()->digitalRead(pinA);
+	uint8_t b = switches.getIoAbstraction()->digitalRead(pinB);
+
 	if(encoderType == QUARTER_CYCLE){
 		if((a != aLast) || (b != cleanFromB)) {
 			aLast = a;
@@ -539,7 +549,6 @@ void HardwareRotaryEncoder::encoderChanged() {
 			}
 		}	
 	}
-#endif	
 }
 
 void HardwareRotaryEncoder::handleChangeRaw(bool increase) {
@@ -563,6 +572,7 @@ void HardwareRotaryEncoder::handleChangeRaw(bool increase) {
     increment((int8_t) (increase ? amt : -amt));
     bitWrite(flags, LAST_ENCODER_DIRECTION_UP, increase);
 }
+#endif // USE_ENCODER_SSM
 
 EncoderUpDownButtons::EncoderUpDownButtons(pinid_t pinUp, pinid_t pinDown, EncoderCallbackFn callback, uint8_t speed)
         : RotaryEncoder(callback), upPin(pinUp), downPin(pinDown), backPin(-1), nextPin(-1), passThroughListener(nullptr),

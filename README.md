@@ -6,9 +6,9 @@ This library provides several useful extensions that make programming Arduino / 
 
 ## djrm: Sept 2023. modified to use simple encoder state machine
 
-The existing library did not work very well for me using the usual cheap encoders available on AE & Ebay although I have had satisfactory results using some other libraries. I have modified this library using code found here: https://github.com/buxtronix/arduino/tree/master/libraries/Rotary and now it is workin ok. Tested on RP2040 and ESP32 with Acceleration and MCP23017 with interrupts.
+The existing library did not work very well for me using the usual cheap encoders available on AE & Ebay although I have had satisfactory results using some other libraries. I have modified this library using code found here: https://github.com/buxtronix/arduino/tree/master/libraries/Rotary and now it is workin ok. Tested on RP2040 and ESP32 with Acceleration and MCP23017 with interrupts using lowcost encoder.
 
-WIP, still need to be able to switch between different encoder types, hardcoded to use HALF_STEP kind. see macro HALF_STEP in SwitchInput.cpp to change
+There is a macro which needs to be defined to enable this change, USE_ENCODER_SSM. this can be a #define in the code (SwitchInput.cpp) or as a build flag compiler option(platformio.ini). 
 
 
 ## Documentation and questions
